@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>漫游星空</title>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+	<link type="text/css" rel="stylesheet" href="main.css">
+</head>
+<body>
+<div id="overlay">
+	<div>
+		<p>鼠标左右键和wsad控制摄像机、空格停止公转</p>
+		<p>小键盘数字1 观察母星地球 小键盘数字2 复位摄像机 </p>
+		<p>F转换飞机视角</p>
+		<button id="startButton">开始游戏</button>
+	</div>
+</div>
+<div id="info">
+
+</div>
+<script id="vertexShader" type="x-shader/x-vertex">
+  varying vec3 vNormal; void main() { vNormal = normalize( normalMatrix * normal ); gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }
+</script>
+<script id="fragmentShader" type="x-shader/x-vertex">
+  varying vec3 vNormal; void main() { float intensity = pow( 0.7 - dot( vNormal, vec3( 0.0, 0.0, 0.5 ) ), 4.0 ); gl_FragColor = vec4( 1.3, 1.0, 1.0, 1.0 ) * intensity; }
+</script>
+
+<script type="module">
+
+	import * as THREE from '../build/three.module.js';
+    import { Lensflare, LensflareElement } from './jsm/objects/Lensflare.js';
+
+	import { FirstPersonControls } from './jsm/controls/FirstPersonControls.js';
+	var stop=1,flag=1;
+	var camera, controls, scene, renderer,light,light1,light2,ambientLight;
+	var player_model,huoxing_model,shuixing_model,jinxing_model,moon_model,earth_model,muxing_model,tuxing_model,tianwangxing_model,haiwangxing_model,mingwangxing_model;
+    var mesh1;
+    var mesh2;
+    var camera_flag=0;
+    var collideMeshList=[];
+    var meshClouds;
+    var trackRing1;
+	var material1, material2;
+	var moon,jin,shui,huo,earth,mu,tu,tianwang,haiwang,mingwang;
+    var doubleplanet;
+	var clock = new THREE.Clock();
+
+	var startButton = document.getElementById( 'startButton' );
+	startButton.addEventListener( 'click', init );
+
+	function init() {
+
+		var overlay = document.getElementById( 'overlay' );
+		overlay.remove();
+
+		camera = new THREE.PerspectiveCamera( 50, window.innerWidth / window.innerHeight, 1, 10000 );
+		camera.position.set( 0, 20, 40 );
+
+		var listener = new THREE.AudioListener();
+		camera.add(listener);
+
+		scene = new THREE.Scene();
+
+		//天空盒
+        var cubeTextureLoader = new THREE.CubeTextureLoader();
+        cubeTextureLoader.setPath( './skybox/' );
+        //六张图片分别是朝前的（posz）、朝后的（negz）、朝上的（posy）、朝下的（negy）、朝右的（posx）和朝左的（negx）。
+        var cubeTexture = cubeTextureLoader.load( [
+            'Left_Tex1.jpg', 'Right_Tex1.jpg',
+            'Up_Tex1.jpg', 'Down_Tex1.jpg',
+            'Front_Tex1.jpg', 'Back_Tex1.jpg'
+
+        ] );
+        scene.background = cubeTexture;
+		light = new THREE.PointLight( 0xffffff );
+		light.position.set( 0, 100, 0 ).normalize();
+
+        light.castShadow = true;
+		scene.add( light );
+        ambientLight = new THREE.AmbientLight("#111111");
+        scene.add(ambientLight);
+
+        //太阳光晕
+
+        var textureLoader = new THREE.TextureLoader();
+        var textureFlare0 = textureLoader.load( './lensflare/lensflare0.png' );
+        var textureFlare3 = textureLoader.load( './lensflare/lensflare3.png' );
+
+		var lensflare = new Lensflare();
+		lensflare.addElement( new LensflareElement( textureFlare0, 3000, 0, light.color ) );
+
+
+
+		lensflare.addElement( new LensflareElement( textureFlare3, 60, 0.6 ) );
+		lensflare.addElement( new LensflareElement( textureFlare3, 70, 0.7 ) );
+		lensflare.addElement( new LensflareElement( textureFlare3, 120, 0.9 ) );
+		lensflare.addElement( new LensflareElement( textureFlare3, 70, 1 ) );
+		light.add( lensflare );
+		// //光晕
+        // let canvas = document.createElement( 'canvas' );
+        // canvas.width = 256;
+        // canvas.height = 256;
+        // let context = canvas.getContext( '2d' );
+        // let gradient = context.createRadialGradient( canvas.width / 2, canvas.height / 2, 0, canvas.width / 2, canvas.height / 2, canvas.width / 2 );//创建一个圆形渐变对象
+        // gradient.addColorStop( 0.1, 'rgba(255,60,0,0.01)' );//内圈的颜色
+        // gradient.addColorStop( 1, 'rgba(255,125,0,1)' );//最外面的颜色
+        // context.fillStyle = gradient;
+        // context.fillRect( 0, 0, canvas.width, canvas.height );//将一个画布使用圆形渐变对象进行填充
+        // let shadowTexture = new THREE.CanvasTexture( canvas );//把刚刚画好的画布拿来作为画布贴图
+        // let shadowMaterial = new THREE.MeshBasicMaterial( { map: shadowTexture,transparent:true } );//用此贴图来当材质
+        // let shadowGeo = new THREE.SphereGeometry(10, 35, 16);
+        // let shadowMesh;
+        // shadowMesh = new THREE.Mesh( shadowGeo, shadowMaterial );
+        // shadowMesh.position.y = 0;
+        // shadowMesh.position.x = 0;
+        // scene.add( shadowMesh );
+		// //
+
+		var sphere = new THREE.SphereBufferGeometry( 90, 35, 16 );
+
+        let texture = new THREE.TextureLoader().load('./picture/太阳.jpg');
+        let sphereGeometry = new THREE.SphereGeometry(10,30,50);
+        sphereGeometry.scale(1, 1, 1);
+		material1 = new THREE.MeshPhongMaterial( {map:texture});
+
+
+		// sound spheres
+
+
+
+		 mesh1 = new THREE.Mesh( sphere, material1 );
+        mesh1.position.set(0,0,0 );
+
+
+
+
+		moon=createplant("月球",38,0,0);
+		moon.scale.set(.25,.25,.25);
+		jin=createplant("金星",200,0,0);
+		jin.scale.set(0.60,0.60,0.60)
+		huo=createplant("火星",400,0,0);
+		huo.scale.set(0.65,0.65,0.65)
+		shui=createplant('水星',100,0,0);
+		shui.scale.set(0.5,0.5,0.5)
+		mu=createplant('木星',1000,0,0);
+		mu.scale.set(10,10,10);
+		tu=createplant('土星',1500,0,0);
+		tu.scale.set(8,8,8)
+		tianwang=createplant('天王星',2000,0,0);
+		tianwang.scale.set(3,3,3);
+		haiwang=createplant('海王星',2200,0,0);
+		haiwang.scale.set(3,3,3);
+		mingwang=createplant("冥王星",2500,0,0);
+		mingwang.scale.set(3,3,3);
+		earth=createplant("earth_atmos_2048",300,0,0);
+		earth.scale.set(2,2,2);
+
+
+
+		//音乐
+		var listener = new THREE.AudioListener();
+		camera.add(listener);
+		var sound1 = new THREE.Audio(listener);
+		scene.add(sound1);
+		var audioLoader = new THREE.AudioLoader();
+		audioLoader.load('./Charli XCX - Boom Clap.mp3', function (buffer) {
+
+			sound1.setBuffer(buffer);
+			sound1.play();
+		});
+
+        let geometry = new THREE.SphereGeometry(10,30,50);
+		//地球云彩
+		var cloudsTexture = THREE.ImageUtils.loadTexture("./picture/earth_clouds_1024.png")
+        var materialClouds = new THREE.MeshLambertMaterial( { color: 0xffffff, map: cloudsTexture, transparent:true } );
+
+		meshClouds = new THREE.Mesh( geometry, materialClouds );
+        meshClouds.scale.set( 2.1, 2.1, 2.1 );
+        meshClouds.position.set(300,0,0);
+        scene.add( meshClouds );
+
+        //月亮
+        moon_model = new THREE.Object3D();
+        scene.add(moon_model);
+        moon_model.position.set(300,0,0);
+        moon_model.add(moon);
+
+        //地球
+        earth_model = new THREE.Object3D();
+        scene.add(earth_model);
+        earth_model.position.set(0,0,0);
+        earth_model.add(earth);
+        earth_model.add(meshClouds);
+        earth_model.add(moon_model);
+
+
+		//火星
+        huoxing_model = new THREE.Object3D();
+        scene.add(huoxing_model);
+        huoxing_model.position.set(0,0,0);
+        huoxing_model.add(huo);
+
+		//水星
+        shuixing_model = new THREE.Object3D();
+        scene.add(shuixing_model);
+        shuixing_model.position.set(0,0,0);
+		shuixing_model.add(shui);
+
+		//金星
+		jinxing_model= new THREE.Object3D();
+		scene.add(jinxing_model);
+		jinxing_model.position.set(0,0,0);
+		jinxing_model.add(jin);
+
+        //土星星环
+        let texture2 = new THREE.TextureLoader().load('./picture/星环.jpg');
+		trackRing1 = new THREE.Mesh(new THREE.RingGeometry(150,200, 50, 1), new THREE.MeshBasicMaterial({
+            map: texture2,
+            side: THREE.DoubleSide
+        }));
+		trackRing1.rotateX(90);
+
+		//土星
+        tuxing_model= new THREE.Object3D();
+        scene.add(tuxing_model);
+        tuxing_model.position.set(0,0,0);
+        tuxing_model.add(tu);
+        tuxing_model.add(trackRing1);
+        trackRing1.position.set(1500,0,0);
+
+
+
+        //木星
+        muxing_model= new THREE.Object3D();
+        scene.add(muxing_model);
+        muxing_model.position.set(0,0,0);
+        muxing_model.add(mu);
+
+        //天王星
+        tianwangxing_model= new THREE.Object3D();
+        scene.add(tianwangxing_model);
+        tianwangxing_model.position.set(0,0,0);
+        tianwangxing_model.add(tianwang);
+
+        //海王星
+        haiwangxing_model= new THREE.Object3D();
+        scene.add(haiwangxing_model);
+        haiwangxing_model.position.set(0,0,0);
+        haiwangxing_model.add(haiwang);
+
+        //冥王星
+        mingwangxing_model= new THREE.Object3D();
+        scene.add(mingwangxing_model);
+        mingwangxing_model.position.set(0,0,0);
+        mingwangxing_model.add(mingwang);
+
+		//透明星球
+        var geometry1 = new THREE.SphereBufferGeometry( 30, 100, 50 );
+        var sphereMaterial = new THREE.MeshBasicMaterial( { envMap: scene.background } );
+        var sphereMesh = new THREE.Mesh( geometry1, sphereMaterial );
+
+
+
+
+        //透明星球2
+        var geometry2 = new THREE.SphereBufferGeometry( 30, 100, 50 );
+        var sphereMaterial2 = new THREE.MeshBasicMaterial( { envMap: scene.background } );
+        var sphereMesh2 = new THREE.Mesh( geometry2, sphereMaterial2 );
+
+
+
+        //双星系统
+		doubleplanet=new THREE.Object3D();
+		scene.add(doubleplanet);
+		doubleplanet.position.set(300,60,300);
+		doubleplanet.add(sphereMesh);
+        doubleplanet.add(sphereMesh2);
+        sphereMesh2.position.set(50,0,0);
+        sphereMesh.position.set(-50,0,0);
+
+		//粒子特效
+		stars();
+		black();
+
+		//按键暂停
+        document.onkeydown = function(ev){ keydown(ev); };
+
+
+
+
+		renderer = new THREE.WebGLRenderer( { antialias: true , alpha: true} );
+		renderer.setPixelRatio( window.devicePixelRatio );
+		renderer.setSize( window.innerWidth, window.innerHeight );
+		document.body.appendChild( renderer.domElement );
+
+		//
+        player_model = new THREE.Object3D();
+        scene.add(player_model);
+		player_model.add(createPlane());
+		player_model.add(camera);
+        player_model.position.set( 200, 30, 0 );
+
+        // light2 = new THREE.PointLight(0xffffff);
+        // light2.position.set( 0, 50,0 ).normalize();
+        // player_model.add( light2 );
+
+		controls = new FirstPersonControls( player_model, renderer.domElement );
+
+		controls.movementSpeed = 70;
+		controls.lookSpeed = 0.15;
+		controls.noFly = true;
+		controls.lookVertical = true;
+
+		//
+
+		window.addEventListener( 'resize', onWindowResize, false );
+
+		animate();
+
+	}
+
+	function onWindowResize() {
+
+		camera.aspect = window.innerWidth / window.innerHeight;
+		camera.updateProjectionMatrix();
+
+		renderer.setSize( window.innerWidth, window.innerHeight );
+
+		controls.handleResize();
+
+	}
+	
+	function keydown(ev) {
+        if(ev.keyCode == 32) { // The right arrow key was pressed
+            if(stop==1)
+            	stop= 0;
+            else if(stop==0)
+				stop=1;
+        }
+        if(ev.keyCode == 70) { // The right arrow key was pressed
+            if(flag==1)
+			{
+                camera.position.set(20,20,40);
+                flag=0;
+			}
+            else if(flag==0)
+			{
+                camera.position.set(0,20,40);
+                flag=1;
+			}
+        }
+        if(ev.keyCode == 97){
+        	flag=2;
+        	earth_model.add(camera);
+        	camera.position.set(320,0,80);
+        	camera.rotation.y=271;
+		}
+		if(ev.keyCode == 98){
+			flag=0;
+			player_model.add(camera);
+			camera.position.set(0,20,40);
+			camera.rotation.y=0;
+		}
+
+
+			return
+    }
+	
+	function animate() {
+
+		requestAnimationFrame( animate );
+
+		if(stop==1){
+            //公转
+            moon_model.rotation.y+=0.035;
+            jinxing_model.rotation.y+=0.025;
+            huoxing_model.rotation.y+=0.007;
+            shuixing_model.rotation.y+=0.015;
+            earth_model.rotation.y+=0.010;
+            tuxing_model.rotation.y+=0.0015;
+            muxing_model.rotation.y+=0.0020;
+            tianwangxing_model.rotation.y+=0.025;
+            haiwangxing_model.rotation.y+=0.030;
+            mingwangxing_model.rotation.y+=0.035;
+            doubleplanet.rotation.y+=0.05;
+		}
+		//自转
+        moon.rotation.y+=0.01;
+        jin.rotation.y+=0.01;
+        huo.rotation.y+=0.01;
+        shui.rotation.y+=0.01;
+        mesh1.rotation.y+=0.01;
+        earth.rotation.y+=0.01;
+        tu.rotation.y+=0.01;
+        mu.rotation.y+=0.01;
+        haiwang.rotation.y+=0.01;
+        tianwang.rotation.y+=0.01;
+        mingwang.rotation.y+=0.01;
+        meshClouds.rotation.y+= 0.015;
+        airplane.propeller.rotation.z += 0.3;
+
+		render();
+
+	}
+	
+
+	function render() {
+
+		var delta = clock.getDelta();
+
+		controls.update( delta );
+
+		renderer.render( scene, camera );
+
+	}
+	//粒子特效
+    function stars() {
+        var starsGeometry = new THREE.Geometry();
+        for (var i = 0; i < 20000; i ++) {
+            var starVector = new THREE.Vector3(
+                THREE.Math.randFloatSpread(3000),
+                THREE.Math.randFloatSpread(200),
+                THREE.Math.randFloatSpread(3000)
+            );
+            starsGeometry.vertices.push(starVector);
+        }
+        var starsMaterial = new THREE.PointsMaterial({color: 0x888888})
+        var starsPoint = new THREE.Points(starsGeometry, starsMaterial);
+        scene.add(starsPoint);
+    }
+    var airplane;
+
+    var Colors = {
+        red:0xf25346,
+        white:0xd8d0d1,
+        brown:0x59332e,
+        pink:0xF5986E,
+        brownDark:0x23190f,
+        blue:0x68c3c0
+    };
+
+
+	//特殊星球
+    function black() {
+        var circle = new THREE.Object3D();
+        var particle = new THREE.Object3D();
+        var halo = new THREE.Object3D();
+        var luminor = new THREE.Object3D();
+
+        scene.add(circle);
+        scene.add(particle);
+        scene.add(halo);
+        scene.add(luminor);
+
+        var geometry = new THREE.TetrahedronGeometry(1, 1);
+        var geo_planet = new THREE.SphereGeometry(10, 64, 32);
+        var geom3 = new THREE.SphereGeometry(16, 32, 16);
+        var geo_star = new THREE.SphereGeometry(90, 64, 64);
+
+        var material = new THREE.MeshPhongMaterial({
+            color: 0x111111,
+            shading: THREE.FlatShading
+        });
+
+        for (var i = 0; i < 500; i++) {
+            var mesh = new THREE.Mesh(geometry, material);
+            mesh.position.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).normalize();
+            mesh.position.multiplyScalar( 200 + (Math.random() * 500));
+            mesh.rotation.set(Math.random() * 2, Math.random() * 2, Math.random() * 2);
+            particle.add(mesh);
+        }
+
+        var mat = new THREE.MeshPhongMaterial({
+            color: 0x000000,
+            emissive: 0x000000,
+        	ading: THREE.FlatShading,
+        	shading : THREE.SmoothShading,
+            specular: new THREE.Color('black')
+    });
+
+        var mat3 = new THREE.ShaderMaterial({
+            uniforms: {},
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent,
+            side: THREE.BackSide,
+            blending: THREE.AdditiveBlending,
+            transparent: true
+        });
+
+        var planet = new THREE.Mesh(geo_planet, mat);
+        planet.scale.x = planet.scale.y = planet.scale.z = 35;
+        circle.add(planet);
+		planet.position.set(9000,60,900);
+        var ball = new THREE.Mesh(geom3, mat3);
+        ball.scale.x = ball.scale.y = ball.scale.z = 30;
+        halo.add(ball);
+        ball.position.set(9000,60,900);
+
+        var ball2 = new THREE.Mesh(geom3, mat3);
+        ball2.scale.x = ball2.scale.y = ball2.scale.z = 29;
+        ball2.position.set(9000,60,900)
+        halo.add(ball2);
+
+        var ambientLight = new THREE.AmbientLight(0x000000);
+        scene.add(ambientLight);
+
+
+
+    }
+
+    function createPlane(){
+        airplane = new AirPlane();
+        airplane.mesh.scale.set(.10,.10,.10);
+        airplane.mesh.position.y = 10;
+        airplane.mesh.position.x = 0;
+
+        return airplane.mesh;
+    }
+
+
+    //碰撞检测
+    function attacktest() {
+        var originPoint = airplane.propeller.position.clone();
+        //console.log(originPoint);
+        for (var vertexIndex = 0; vertexIndex < airplane.propeller.geometry.vertices.length; vertexIndex++) {
+            // 顶点原始坐标
+            var localVertex = airplane.propeller.geometry.vertices[vertexIndex].clone();
+            // 顶点经过变换后的坐标
+            var globalVertex = localVertex.applyMatrix4(airplane.propeller.matrix);
+            var directionVector = globalVertex.sub(airplane.propeller.position);
+            console.log(directionVector.clone().normalize())
+            var ray = new THREE.Raycaster(originPoint, directionVector.clone().normalize());
+            var collisionResults = ray.intersectObjects(collideMeshList);
+            //console.log(collideMeshList)
+            console.log(collisionResults);
+            if (collisionResults.length > 0 && collisionResults[0].distance <=0) {
+                //console.log(collisionResults );
+                //console.log(directionVector.length());
+
+            }
+
+        }
+    }
+
+	function createplant(str,x,y,z) {
+        let texture = new THREE.TextureLoader().load('./picture/'+str+'.jpg');
+        let sphereGeometry = new THREE.SphereGeometry(10,30,50);
+        sphereGeometry.scale(1, 1, 1);
+        let sphereMaterial = new THREE.MeshPhongMaterial({map: texture,bumpMap:texture});
+        var plant = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        plant.position.set(x,y,z);
+        collideMeshList.push(plant);
+        return plant;
+
+    }
+    var AirPlane = function() {
+
+        this.mesh = new THREE.Object3D();
+
+        // 创建机舱
+        var geomCockpit = new THREE.BoxGeometry(50, 50, 80, 1, 1, 1);
+        var matCockpit = new THREE.MeshPhongMaterial({
+            color: Colors.red,
+            flatShading: THREE.FlatShading
+        });
+        geomCockpit.vertices[0].x-=10;
+        geomCockpit.vertices[0].y-=5;
+        geomCockpit.vertices[2].x-=10;
+        geomCockpit.vertices[2].y+=30;
+        geomCockpit.vertices[5].x+=10;
+        geomCockpit.vertices[5].y-=5;
+        geomCockpit.vertices[7].x+=10;
+        geomCockpit.vertices[7].y+=30;
+
+        var cockpit = new THREE.Mesh(geomCockpit, matCockpit);
+        cockpit.position.z =40;
+        cockpit.castShadow = true;
+        cockpit.receiveShadow = true;
+        this.mesh.add(cockpit);
+
+        // 创建引擎
+        var geomEngine = new THREE.BoxGeometry(50, 50, 20, 1, 1, 1);
+        var matEngine = new THREE.MeshPhongMaterial({
+            color: Colors.white,
+            flatShading: THREE.FlatShading
+        });
+        var engine = new THREE.Mesh(geomEngine, matEngine);
+        engine.position.z = -10;
+        engine.castShadow = true;
+        engine.receiveShadow = true;
+        this.mesh.add(engine);
+
+        // 创建机尾
+        var geomTailPlane = new THREE.BoxGeometry(5, 20, 15, 1, 1, 1);
+        var matTailPlane = new THREE.MeshPhongMaterial({
+            color: Colors.red,
+            flatShading: THREE.FlatShading
+        });
+        var tailPlane = new THREE.Mesh(geomTailPlane, matTailPlane);
+        tailPlane.position.set(0, 25, 85);
+        tailPlane.castShadow = true;
+        tailPlane.receiveShadow = true;
+        this.mesh.add(tailPlane);
+
+        // 创建机翼
+        var geomSideWing = new THREE.BoxGeometry(150, 8, 40, 1, 1, 1);
+        var matSideWing = new THREE.MeshPhongMaterial({
+            color: Colors.red,
+            flatShading: THREE.FlatShading
+        });
+        geomSideWing.vertices[0].y-=5;
+        geomSideWing.vertices[5].y-=5;
+
+        var sideWing = new THREE.Mesh(geomSideWing, matSideWing);
+        sideWing.position.set(0, 20, 25)
+        sideWing.castShadow = true;
+        sideWing.receiveShadow = true;
+        this.mesh.add(sideWing);
+
+        // 创建螺旋桨
+        var geomPropeller = new THREE.BoxGeometry(10, 10, 20, 1, 1, 1);
+        var matPropeller = new THREE.MeshPhongMaterial({
+            color: Colors.brown,
+            flatShading: THREE.FlatShading
+        });
+        this.propeller = new THREE.Mesh(geomPropeller, matPropeller);
+        this.propeller.castShadow = true;
+        this.propeller.receiveShadow = true;
+
+        // 创建螺旋桨的桨叶
+        var geomBlade = new THREE.BoxGeometry(20, 100, 1, 1, 1, 1);
+        var matBlade = new THREE.MeshPhongMaterial({
+            color: Colors.pink,
+            flatShading: THREE.FlatShading
+        });
+
+        var blade = new THREE.Mesh(geomBlade, matBlade);
+        blade.position.set(0, 0, -10);
+        blade.castShadow = true;
+        blade.receiveShadow = true;
+        this.propeller.add(blade);
+        this.propeller.position.set(0, 0, -20);
+        this.mesh.add(this.propeller);
+    };
+</script>
+
+</body>
+</html>
